@@ -34,7 +34,40 @@ header_t *get_free_block(size_t size)
 		curr = curr->s.next;
 	}
 	return NULL;
-}   
+}
+
+// Here comes the free() function
+
+void free(void *block){
+    header_t *header,*temp;
+    void *programbreak;
+    if(!block){
+        return;
+    }
+    pthread_mutex_lock(&global_malloc_lock);
+    header = (header_t*)block-1;
+    programbreak = sbrk(0);
+    if((char*)block + header->s.size == programbreak){
+        if(head == tail){
+            head = tail = NULL;
+        }
+        else{
+            temp = head;
+            while(temp){
+                if(temp->s.next == tail){
+                    temp->s.next = NULL;
+                    tail = temp;
+                }
+                temp = temp->s.next;
+            }
+        }
+        sbrk(0 - sizeof(header_t) - header->s.size);
+		pthread_mutex_unlock(&global_malloc_lock);
+		return;
+    }
+    header->s.is_free = 1;
+	pthread_mutex_unlock(&global_malloc_lock);
+}
 
 // Here comes the malloc() function
 
@@ -72,39 +105,6 @@ void *malloc(size_t size){
     pthread_mutex_unlock(&global_malloc_lock);
 	return (void*)(header + 1);
 } 
-
-// Here comes the free() function
-
-void free(void *block){
-    header_t *header,*temp;
-    void *programbreak;
-    if(!block){
-        return;
-    }
-    pthread_mutex_lock(&global_malloc_lock);
-    header = (header_t*)block-1;
-    programbreak = sbrk(0);
-    if((char*)block + header->s.size == programbreak){
-        if(head == tail){
-            head = tail = NULL;
-        }
-        else{
-            temp = head;
-            while(temp){
-                if(temp->s.next == tail){
-                    temp->s.next = NULL;
-                    tail = temp;
-                }
-                temp = temp->s.next;
-            }
-        }
-        sbrk(0 - sizeof(header_t) - header->s.size);
-		pthread_mutex_unlock(&global_malloc_lock);
-		return;
-    }
-    header->s.is_free = 1;
-	pthread_mutex_unlock(&global_malloc_lock);
-}
 
 // Here comes the calloc() function
 
@@ -145,8 +145,17 @@ void *realloc(void *block,size_t size){
     }
     return ret;
 }
-int main(){
-    printf("Hello World!");
-    return 0;
+
+// A debug function to print the entire link list 
+
+void print_mem_list()
+{
+	header_t *curr = head;
+	printf("head = %p, tail = %p \n", (void*)head, (void*)tail);
+	while(curr) {
+		printf("addr = %p, size = %zu, is_free=%u, next=%p\n",
+			(void*)curr, curr->s.size, curr->s.is_free, (void*)curr->s.next);
+		curr = curr->s.next;
+	}
 }
 
